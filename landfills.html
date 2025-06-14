@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>REVIVA Landfills – Interactive Dashboard</title>
+
+  <!-- FONTS & ICONS -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- DATATABLES CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+
+  <!-- EXPORT TO EXCEL (SheetJS) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <style>
+    :root {
+      --grad-primary: linear-gradient(135deg, #0057B7 0%, #6B2D90 100%);
+      --grad-secondary: linear-gradient(135deg, #009999 0%, #00B3B3 100%);
+      --grad-accent: linear-gradient(135deg, #38bdf8 0%, #5ac8fa 100%);
+      --glass: rgba(255,255,255,0.25);
+      --glass-line: rgba(255,255,255,0.18);
+      --shadow-s: 0 10px 25px rgba(0,0,0,0.1);
+      --shadow-m: 0 20px 40px rgba(0,0,0,0.15);
+      --shadow-l: 0 25px 50px rgba(0,0,0,0.25);
+
+      /* logo colours */
+      --logo-primary:   #0057B7;
+      --logo-secondary: #6B2D90;
+      --logo-accent:    #38bdf8;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #667eea, #764ba2 50%, #f093fb);
+      min-height: 100vh;
+      overflow-x: hidden;
+      color: #1f2937;
+    }
+
+    .bg-particles { position: fixed; inset: 0; pointer-events: none; z-index: -1; }
+    .particle {
+      position: absolute; border-radius: 50%; background: rgba(255,255,255,0.1);
+      animation: float 6s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%,100% { transform: translateY(0) rotate(0); }
+      50%     { transform: translateY(-20px) rotate(180deg); }
+    }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 20px; position: relative; z-index: 1; }
+
+    /* HEADER BAR */
+    .header-bar {
+      display: flex; align-items: center; gap: 15px; padding: 20px 30px; margin-bottom: 30px;
+      background: var(--glass); backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-line); border-radius: 20px; box-shadow: var(--shadow-m);
+      position: relative; overflow: visible; z-index: 1000;
+    }
+    .header-bar::before {
+      content: ''; position: absolute; inset: 0;
+      background: var(--grad-primary); opacity: 0.9; z-index: -1;
+    }
+    .header-bar img { height: 60px; border-radius: 10px; transition: transform 0.3s; }
+    .header-bar img:hover { transform: scale(1.1) rotate(5deg); }
+    .header-bar h1 {
+      flex: 1; font-size: 2rem; font-weight: 700;
+      background: linear-gradient(45deg, #fff, #f0f9ff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+
+    /* UPDATED CUSTOM DROPDOWN */
+    .sort-dropdown {
+      position: relative; width: 200px; z-index: 1001; user-select: none;
+    }
+    .sort-dropdown .dropdown-trigger {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; background: var(--glass); backdrop-filter: blur(15px);
+      border-radius: 12px; border: 1px solid var(--glass-line);
+      cursor: pointer; transition: background 0.3s, box-shadow 0.3s;
+    }
+    .sort-dropdown .dropdown-trigger:hover {
+      background: rgba(255,255,255,0.35); box-shadow: var(--shadow-m);
+    }
+    .sort-dropdown .dropdown-trigger i {
+      transition: transform 0.3s, color 0.3s; color: var(--logo-primary);
+    }
+    .sort-dropdown.open .dropdown-trigger i {
+      transform: rotate(-180deg); color: var(--logo-secondary);
+    }
+    .sort-dropdown .dropdown-menu {
+      position: absolute; top: calc(100% + 6px); left: 0; width: 100%;
+      max-height: 260px; overflow-y: auto;
+      background: rgba(255,255,255,0.25); backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-line); border-radius: 12px;
+      box-shadow: var(--shadow-l);
+      opacity: 0; visibility: hidden; transform: translateY(-10px);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      list-style: none; padding: 8px 0;
+    }
+    .sort-dropdown.open .dropdown-menu {
+      opacity: 1; visibility: visible; transform: translateY(0);
+    }
+    .sort-dropdown .dropdown-menu li {
+      padding: 10px 16px; margin: 2px 0; cursor: pointer;
+      border-radius: 8px; color: #1f2937; font-weight: 500;
+      transition: background 0.2s, color 0.2s;
+    }
+    .sort-dropdown .dropdown-menu li:hover {
+      background: var(--grad-accent); color: #fff;
+    }
+    .sort-dropdown .dropdown-menu li.selected {
+      background: var(--grad-primary); color: #fff;
+    }
+    .sort-dropdown .dropdown-menu .search-input {
+      display: block; width: calc(100% - 32px); margin: 8px 16px;
+      padding: 6px 10px; border: none; border-radius: 6px;
+      background: rgba(255,255,255,0.8); font-size: 0.9rem; color: #333;
+      outline: none; transition: background 0.2s;
+    }
+    .sort-dropdown .dropdown-menu .search-input:focus {
+      background: #fff;
+    }
+    .sort-dropdown .dropdown-menu::-webkit-scrollbar {
+      width: 6px;
+    }
+    .sort-dropdown .dropdown-menu::-webkit-scrollbar-thumb {
+      background: var(--logo-secondary); border-radius: 3px;
+    }
+    .sort-dropdown .dropdown-menu::-webkit-scrollbar-track {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .export-btn {
+      background: var(--glass); backdrop-filter: blur(10px);
+      color: #fff; border: 1px solid var(--glass-line);
+      font-weight: 600; border-radius: 12px; padding: 10px 16px;
+      cursor: pointer; display: flex; align-items: center; gap: 6px;
+      transition: transform 0.3s, box-shadow 0.3s, background 0.3s;
+    }
+    .export-btn:hover {
+      transform: translateY(-2px); box-shadow: var(--shadow-m);
+      background: rgba(255,255,255,0.3);
+    }
+
+    .cards-row {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(250px,1fr));
+      gap: 25px; margin-top: 25px;
+    }
+    .card {
+      position: relative; background: var(--glass); backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-line); border-radius: 20px; padding: 28px;
+      text-align: center; box-shadow: var(--shadow-s); overflow: hidden;
+    }
+    .card h3 {
+      display: flex; justify-content: center; align-items: center; gap: 8px;
+      font-size: 1.05rem; color: #fff; margin-bottom: 12px;
+    }
+    .card .value {
+      font-size: 2rem; font-weight: 800;
+      background: linear-gradient(45deg, #fff, #f0f9ff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .data-table-container {
+      margin-top: 40px; background: var(--glass); backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-line); padding: 30px; border-radius: 20px;
+      box-shadow: var(--shadow-m); position: relative;
+    }
+    .data-table-container::before {
+      content: ''; position: absolute; inset: 0; background: rgba(255,255,255,0.95); z-index: -1;
+    }
+    table.dataTable {
+      width: 100% !important; border-collapse: collapse; border-radius: 15px;
+      overflow: hidden; box-shadow: var(--shadow-s);
+    }
+    table.dataTable thead th {
+      background: var(--grad-primary); color: #fff; font-weight: 600; padding: 16px; border: none;
+    }
+    table.dataTable tbody tr:nth-child(odd)  { background: #fafafa; }
+    table.dataTable tbody tr:nth-child(even) { background: #fff; }
+    table.dataTable tbody tr:hover {
+      background: linear-gradient(90deg, rgba(102,126,234,0.1), rgba(91,200,250,0.1));
+      transform: scale(1.01);
+    }
+
+    #riskAlerts > div {
+      background: #ffe8e8; border-left: 6px solid #e60000;
+      padding: 14px 18px; border-radius: 10px; margin-top: 25px;
+    }
+
+    footer {
+      text-align: center; color: #fff; padding: 20px;
+      font-weight: 500; background: var(--grad-primary);
+      border-top: 3px solid var(--grad-accent); margin-top: 40px;
+    }
+    footer a { color: #fff; text-decoration: underline; transition: color 0.3s; }
+    footer a:hover { color: #f0f; }
+
+    @media(max-width:768px) {
+      .header-bar { flex-direction: column; text-align: center; }
+      .header-bar h1 { font-size: 1.6rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-particles" id="particles"></div>
+
+  <div class="header-bar">
+    <img src="Logo.png" alt="REVIVA logo">
+    <h1>♻️ Reviva Landfills ♻️</h1>
+
+    <div class="filter-wrapper">
+      <div class="sort-dropdown" id="siteDropdown">
+        <div class="dropdown-trigger">
+          <span id="dropdownLabel">All Sites</span>
+          <i class="fas fa-chevron-down"></i>
+        </div>
+        <ul class="dropdown-menu" id="dropdownMenu">
+          <!-- search box + items injected by JS -->
+        </ul>
+        <select id="siteFilter" name="siteFilter" hidden>
+          <option value="__all__" selected>All Sites</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="exportStyledExcelBtn" class="export-btn">
+      <i class="fas fa-file-excel"></i> Export Excel
+    </button>
+  </div>
+
+  <div class="container">
+    <div id="riskAlerts"></div>
+    <div class="cards-row" id="kpiCards"></div>
+    <div id="tablesContainer"></div>
+  </div>
+
+  <footer>
+    <p>&copy; 2025 REVIVA E&amp;S Department</p>
+    <p>Contact: <a href="mailto:fayad@reviva.sa">fayad@reviva.sa</a> | <a href="mailto:mohammed.s@reviva.sa">mohammed.s@reviva.sa</a></p>
+  </footer>
+
+  <!-- DEPENDENCIES -->
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+  <script>
+    const CONFIG = {
+      SHEET_ID: '1aBxE2GuTSdH2HqValNijKRvcKieQNsQfSBUdRI93Ix8',
+      API_KEY: 'AIzaSyCNAKSaWC7omT6wviAqzofXfmceTZvguPs',
+      RANGE: 'Data!A:H'
+    };
+    let ALL_SECTIONS = [];
+    let currentSectionsFiltered = [];
+    let tablesInitialized = false;
+    const originalTitle = document.title;
+
+    // Request notification permission on load
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    function createParticles() {
+      const container = document.getElementById('particles');
+      for (let i = 0; i < 50; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        const size = Math.random() * 4 + 2;
+        Object.assign(p.style, {
+          width: `${size}px`, height: `${size}px`,
+          left: `${Math.random() * window.innerWidth}px`,
+          top: `${Math.random() * window.innerHeight}px`,
+          animationDelay: `${Math.random() * 6}s`
+        });
+        container.appendChild(p);
+      }
+    }
+
+    async function fetchSheet() {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.RANGE)}?key=${CONFIG.API_KEY}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(res.statusText);
+      const json = await res.json();
+      const keys = ['Area & Capacity Summary','Operation & Closure','Environmental Inspection'];
+      const sections = []; let current = null;
+      json.values.forEach(row => {
+        const tag = (row[0]||'').trim();
+        if (keys.includes(tag)) {
+          current = { sectionName: tag, header: null, rows: [] };
+          sections.push(current);
+        } else if (current && tag === 'Site') {
+          current.header = row;
+        } else if (current && current.header) {
+          const padded = [...row];
+          while (padded.length < current.header.length) padded.push('');
+          current.rows.push(padded);
+        }
+      });
+      return sections;
+    }
+
+    function buildSiteDropdown(sections) {
+      const select = document.getElementById('siteFilter');
+      const ops = sections.find(s => s.sectionName === 'Operation & Closure');
+      if (!ops) return;
+      const idx = ops.header.indexOf('Site');
+      const unique = [...new Set(ops.rows.map(r => r[idx].trim()))].sort();
+
+      select.innerHTML =
+        `<option value="__all__">All Sites</option>` +
+        unique.map(s => `<option value="${s}">${s}</option>`).join('');
+
+      const menu = document.getElementById('dropdownMenu');
+      let itemsHTML = `<li><input type="text" class="search-input" placeholder="Search…" /></li>`;
+      itemsHTML += Array.from(select.options)
+        .map(opt => `<li data-value="${opt.value}">${opt.text}</li>`).join('');
+      menu.innerHTML = itemsHTML;
+
+      const dropdown = document.getElementById('siteDropdown');
+      const label = document.getElementById('dropdownLabel');
+      const searchInput = menu.querySelector('.search-input');
+      const itemLis = Array.from(menu.querySelectorAll('li[data-value]'));
+
+      dropdown.addEventListener('click', e => {
+        if (e.target === searchInput) return;
+        dropdown.classList.toggle('open');
+        if (dropdown.classList.contains('open')) {
+          searchInput.value = '';
+          itemLis.forEach(li => li.style.display = '');
+          searchInput.focus();
+        }
+      });
+
+      itemLis.forEach(li => {
+        li.addEventListener('click', e => {
+          e.stopPropagation();
+          itemLis.forEach(x => x.classList.remove('selected'));
+          li.classList.add('selected');
+          select.value = li.dataset.value;
+          label.textContent = li.textContent;
+          dropdown.classList.remove('open');
+          renderAll();
+        });
+      });
+
+      searchInput.addEventListener('input', () => {
+        const term = searchInput.value.trim().toLowerCase();
+        itemLis.forEach(li => {
+          const txt = li.textContent.toLowerCase();
+          li.style.display = txt.includes(term) ? '' : 'none';
+        });
+      });
+    }
+
+    function filterSections(sections, site) {
+      if (site === '__all__') return sections;
+      return sections.map(sec => {
+        if (!sec.header) return sec;
+        const idx = sec.header.indexOf('Site');
+        if (idx === -1) return sec;
+        return { ...sec, rows: sec.rows.filter(r => r[idx].trim() === site) };
+      });
+    }
+
+    function renderKPIs(sections) {
+      const eng = sections.find(s => s.sectionName === 'Area & Capacity Summary');
+      const ops = sections.find(s => s.sectionName === 'Operation & Closure');
+      if (!eng || !ops) return;
+      const sum = (sec,col) => sec.rows.reduce((a,r)=>a+(+r[sec.header.indexOf(col)].replace(/,/g,'')||0),0);
+      const fmt = n => n.toLocaleString();
+      document.getElementById('kpiCards').innerHTML = `
+        <div class="card"><h3><i class="fas fa-cubes"></i>Total Capacity</h3><div class="value">${fmt(sum(eng,'Capacity (Cu.M)'))}</div></div>
+        <div class="card"><h3><i class="fas fa-coins"></i>Expansion Cost</h3><div class="value">SAR ${fmt(sum(eng,'Expansion Cost'))}</div></div>
+        <div class="card"><h3><i class="fas fa-chart-bar"></i>Current Volume</h3><div class="value">${fmt(sum(ops,'Current Volume (m³)'))}</div></div>
+        <div class="card"><h3><i class="fas fa-tachometer-alt"></i>Remaining Capacity</h3><div class="value">${fmt(sum(ops,'Remain Capacity (m³)'))}</div></div>`;
+    }
+
+    function renderRiskAlerts(sections) {
+      const ops = sections.find(s => s.sectionName === 'Operation & Closure');
+      if (!ops) return;
+      const iC = ops.header.indexOf('Current Volume (m³)');
+      const iR = ops.header.indexOf('Remain Capacity (m³)');
+      const iS = ops.header.indexOf('Site');
+
+      const alerts = ops.rows.filter(r => {
+        const cur = +r[iC].replace(/,/g,'')||0;
+        const rem = +r[iR].replace(/,/g,'')||0;
+        if (cur + rem === 0) return false;
+        const ratio = cur / (cur + rem);
+        return ratio >= 0.8 && ratio < 0.95;
+      });
+
+      const box = document.getElementById('riskAlerts');
+      if (!alerts.length) {
+        box.innerHTML = '';
+        document.title = originalTitle;
+        return;
+      }
+
+      box.innerHTML = `<div><strong style="color:#e60000">⚠︎ Attention</strong><br>` +
+        alerts.map(r =>
+          `${r[iS]} → ${(100 * (+r[iC].replace(/,/g,'')) / (+r[iC].replace(/,/g,'') + +r[iR].replace(/,/g,''))).toFixed(1)}% full`
+        ).join('<br>') + `</div>`;
+
+      // Tab/Desktop notification if hidden
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        const title = `⚠︎ ${alerts.length} site${alerts.length > 1 ? 's' : ''} near full`;
+        const body = alerts.map(r =>
+          `${r[iS]}: ${(100 * (+r[iC].replace(/,/g,'')) / (+r[iC].replace(/,/g,'') + +r[iR].replace(/,/g,''))).toFixed(1)}%`
+        ).join('\n');
+        new Notification(title, { body, icon: 'Logo.png' });
+      }
+
+      document.title = `⚠︎ (${alerts.length}) Reviva Alerts`;
+    }
+
+    function initTableObserver() {
+      const container = document.getElementById('tablesContainer');
+      const observer = new IntersectionObserver((entries, obs) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && !tablesInitialized) {
+            renderTables(currentSectionsFiltered);
+            tablesInitialized = true;
+            obs.disconnect();
+          }
+        });
+      }, { rootMargin: '200px' });
+      observer.observe(container);
+    }
+
+    function renderTables(sections) {
+      const container = $('#tablesContainer').empty();
+      sections.forEach(sec => {
+        const id = sec.sectionName.replace(/[^a-zA-Z0-9]/g,'') + 'Tbl';
+        container.append(`<div class="data-table-container"><h2>${sec.sectionName}</h2><table id="${id}" class="display"></table></div>`);
+        $('#' + id).DataTable({
+          data: sec.rows,
+          columns: sec.header.map(h => ({ title: h })),
+          paging: true, searching: true, ordering: true,
+          info: true, responsive: true, pageLength: 10
+        });
+      });
+    }
+
+    document.getElementById('exportStyledExcelBtn').addEventListener('click', () => {
+      const tables = document.querySelectorAll('.data-table-container table');
+      if (!tables.length) return alert('No data to export.');
+      const wb = XLSX.utils.book_new(), used = new Set();
+      tables.forEach((tbl,i) => {
+        const ws = XLSX.utils.table_to_sheet(tbl,{ raw:true, dateNF:'yyyy-mm-dd' });
+        const rng = XLSX.utils.decode_range(ws['!ref']);
+        ws['!cols'] = Array.from({ length: rng.e.c - rng.s.c + 1 }, (_, C) => {
+          let w = 10;
+          for (let R = rng.s.r; R <= rng.e.r; ++R) {
+            const cell = ws[XLSX.utils.encode_cell({ r:R, c:C })];
+            if (cell && cell.v != null) w = Math.max(w, cell.v.toString().length + 2);
+          }
+          return { wch: w };
+        });
+        ws['!freeze'] = { xSplit:0, ySplit:1 };
+        ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:rng.e.c} }) };
+        let title = tbl.previousElementSibling?.textContent.trim().slice(0,31) || `Sheet${i+1}`;
+        title = title.replace(/[/\\?*\[\]:]/g,'') || `Sheet${i+1}`;
+        let uniq = title, n = 1;
+        while (used.has(uniq)) uniq = `${title.slice(0,28)}_${n++}`;
+        used.add(uniq);
+        XLSX.utils.book_append_sheet(wb, ws, uniq);
+      });
+      const fname = `Landfills_${new Date().toISOString().slice(0,10)}.xlsx`;
+      XLSX.writeFile(wb, fname, { compression: true });
+    });
+
+    async function init() {
+      ALL_SECTIONS = await fetchSheet();
+      buildSiteDropdown(ALL_SECTIONS);
+      renderAll();
+    }
+
+    function renderAll() {
+      const site = document.getElementById('siteFilter').value;
+      currentSectionsFiltered = filterSections(ALL_SECTIONS, site);
+      renderKPIs(currentSectionsFiltered);
+      renderRiskAlerts(currentSectionsFiltered);
+      initTableObserver();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      createParticles();
+      init();
+    });
+  </script>
+</body>
+</html>
